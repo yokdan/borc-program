@@ -49,8 +49,6 @@
                 </div>
                 <div class="chart-container"><canvas id="butceGrafigi"></canvas></div>
             </div>
-            <!-- Yeni Ay Başlat butonu, bu fonksiyonun script.js'de tanımlanması gerekir -->
-            <!-- <button class="sifirla-btn" onclick="yeniAyBaslat()">Yeni Ay Başlat</button> -->
         </div>
         <div id="Borclar" class="tab-content">
             <h2>Borç Yönetimi</h2>
@@ -87,29 +85,30 @@
             <div class="ayar-grup"><label for="birikimOrani">Birikim Oranı (%): <span id="birikimOraniLabel">20</span>%</label><input type="range" id="birikimOrani" min="0" max="100" value="20" oninput="updateLabel('birikimOrani', 'birikimOraniLabel')"></div>
             <div class="ayar-grup"><label for="borcOrani">Borç Ödeme Oranı (%): <span id="borcOraniLabel">20</span>%</label><input type="range" id="borcOrani" min="0" max="100" value="20" oninput="updateLabel('borcOrani', 'borcOraniLabel')"></div>
             <button onclick="ayarlariKaydet()">Ayarları Kaydet</button>
+
+            <!-- BİLDİRİM BUTONU BURADA EKLİ -->
+            <hr>
+            <h3>Bildirimler</h3>
+            <div class="ayar-grup">
+                <button onclick="subscribeToNotifications()">Acil Borç Bildirimlerini Aktive Et</button>
+                <p style="font-size: 0.9em; color: #6c757d; margin-top: 10px;">
+                    Bu özellik, son ödeme tarihi yaklaşan borçlarınız için size anlık bildirimler gönderir. Lütfen tarayıcınızın soracağı izni onaylayın.
+                </p>
+            </div>
+            <!-- BİLDİRİM BÖLÜMÜ SONU -->
+
         </div>
     </main>
 
-    <!-- ====================================================== -->
-    <!-- ==== FIREBASE VE UYGULAMA SCRIPTLERI BAŞLANGIÇ ======= -->
-    <!-- ====================================================== -->
-
-    <!-- Firebase SDK (Software Development Kit) Script'leri -->
+    <!-- Firebase ve diğer scriptler -->
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-
-    <!-- Kendi Firebase Başlatma Script'imiz -->
     <script src="firebase-init.js"></script>
-    
-    <!-- Ana Uygulama Mantık Script'i -->
     <script src="script.js"></script>
-
-    <!-- PWA için Service Worker'ı Kaydetme Script'i -->
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // GITHUB PAGES İÇİN YOL DÜZELTİLDİ:
           navigator.serviceWorker.register('/borc-program/sw.js').then(registration => {
             console.log('Service Worker başarıyla kaydedildi.', registration);
           }).catch(registrationError => {
@@ -118,10 +117,5 @@
         });
       }
     </script>
-    
-    <!-- ====================================================== -->
-    <!-- ==== FIREBASE VE UYGULAMA SCRIPTLERI BİTİŞ =========== -->
-    <!-- ====================================================== -->
-
 </body>
 </html>
