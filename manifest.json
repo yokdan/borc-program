@@ -1,0 +1,25 @@
+{
+  "name": "Akıllı Bütçe Asistanım",
+  "short_name": "Bütçem",
+  "description": "Kişisel gelir, borç ve birikim yönetimi uygulaması.",
+  
+  "start_url": "/borc-program/",
+  
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#007bff",
+  "icons": [
+    {
+      "src": "/borc-program/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/borc-program/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

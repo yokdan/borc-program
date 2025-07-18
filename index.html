@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Akıllı Bütçe Asistanı</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> 
+    
+    <!-- PWA (Progressive Web App) için Manifest Dosyası -->
+    <link rel="manifest" href="manifest.json">
+    <!-- PWA için Mobil Tarayıcı Tema Rengi -->
+    <meta name="theme-color" content="#007bff">
+</head>
+<body>
+    <header>
+    <div id="user-info" style="display: none;">
+        <span id="user-email"></span>
+        <button id="sign-out-btn" onclick="signOutUser()">Çıkış Yap</button>
+    </div>
+    <h1>Akıllı Bütçe Asistanım</h1>
+    <button id="sign-in-btn" onclick="signInWithGoogle()">Google ile Giriş Yap</button>
+</header>
+    <nav>
+        <button class="tab-button active" onclick="openTab(event, 'AnaSayfa')">Ana Sayfa</button>
+        <button class="tab-button" onclick="openTab(event, 'Borclar')">Borç Takibi</button>
+        <button class="tab-button" onclick="openTab(event, 'BirikimHedefleri')">Birikim Hedefleri</button>
+        <button class="tab-button" onclick="openTab(event, 'Ayarlar')">Ayarlar</button>
+    </nav>
+    <main>
+        <div id="AnaSayfa" class="tab-content" style="display: block;">
+            <div class="gelir-yonetimi">
+                <div class="gelir-ekleme-formu">
+                    <h2>Gelir Yönetimi</h2>
+                    <input type="text" id="gelirAciklama" placeholder="Gelir Açıklaması (Örn: Maaş)">
+                    <input type="number" id="gelirTutar" placeholder="Tutar (₺)">
+                    <button id="gelirEkleBtn" onclick="gelirEkleDuzenle()">Ekle ve Dağıt</button>
+                </div>
+                <div class="gelir-listesi-alani">
+                    <h2>Bu Ayın Gelirleri</h2>
+                    <table id="gelirlerTablosu"><thead><tr><th>Açıklama</th><th>Tutar</th><th>İşlemler</th></tr></thead><tbody></tbody></table>
+                </div>
+            </div>
+            <hr>
+            <h2>Aylık Bütçe Özeti</h2>
+            <div class="sonuc-container">
+                <div id="dagilimSonuc">
+                    <p id="toplamGelirOzet"></p><p id="borcSonuc"></p><p id="birikimSonuc"></p><p id="harcamaSonuc"></p>
+                </div>
+                <div class="chart-container"><canvas id="butceGrafigi"></canvas></div>
+            </div>
+            <!-- Yeni Ay Başlat butonu, bu fonksiyonun script.js'de tanımlanması gerekir -->
+            <!-- <button class="sifirla-btn" onclick="yeniAyBaslat()">Yeni Ay Başlat</button> -->
+        </div>
+        <div id="Borclar" class="tab-content">
+            <h2>Borç Yönetimi</h2>
+            <div class="form-container borc-ekleme-formu">
+                <input type="text" id="borcKategoriInput" list="kategoriListesi" placeholder="Kategori Seç veya Yaz" title="Kategori"><datalist id="kategoriListesi"></datalist>
+                <input type="number" id="borcTutar" placeholder="Toplam Tutar (₺)" title="Toplam Tutar">
+                <input type="number" id="taksitSayisi" placeholder="Taksit" value="1" title="Taksit Sayısı">
+                <input type="date" id="borcSonTarih" title="Bir Sonraki Ödeme Tarihi">
+                <button id="borcEkleBtn" onclick="borcEkleDuzenle()">Borç Ekle</button>
+            </div>
+            <hr class="ince-cizgi">
+            <div class="borc-listesi-baslik">
+                <h3 id="toplamBorcGostergesi">Toplam Borç: 0,00 ₺</h3>
+                <h3 id="kullanilabilirFonGostergesi">Kullanılabilir Fon: 0,00 ₺</h3>
+            </div>
+            <div id="borclarListesi"></div>
+        </div>
+        <div id="BirikimHedefleri" class="tab-content">
+            <h2>Birikim Hedefleri</h2>
+            <div class="hedef-listesi-baslik">
+                <h3 id="toplamHedefGostergesi">Toplam Hedef: 0,00 ₺</h3>
+                <h3 id="kullanilabilirBirikimFonuGostergesi">Kullanılabilir Fon: 0,00 ₺</h3>
+            </div>
+            <div class="form-container">
+                <h3>Yeni Hedef Ekle</h3>
+                <input type="text" id="hedefAdi" placeholder="Hedef Adı (Örn: Ev Peşinatı)">
+                <input type="number" id="hedefTutar" placeholder="Hedef Tutar (₺)">
+                <button onclick="hedefEkle()">Hedef Ekle</button>
+            </div>
+            <div id="hedeflerListesi"></div>
+        </div>
+        <div id="Ayarlar" class="tab-content">
+            <h2>Dağılım Oranları</h2>
+            <div class="ayar-grup"><label for="birikimOrani">Birikim Oranı (%): <span id="birikimOraniLabel">20</span>%</label><input type="range" id="birikimOrani" min="0" max="100" value="20" oninput="updateLabel('birikimOrani', 'birikimOraniLabel')"></div>
+            <div class="ayar-grup"><label for="borcOrani">Borç Ödeme Oranı (%): <span id="borcOraniLabel">20</span>%</label><input type="range" id="borcOrani" min="0" max="100" value="20" oninput="updateLabel('borcOrani', 'borcOraniLabel')"></div>
+            <button onclick="ayarlariKaydet()">Ayarları Kaydet</button>
+        </div>
+    </main>
+
+    <!-- ====================================================== -->
+    <!-- ==== FIREBASE VE UYGULAMA SCRIPTLERI BAŞLANGIÇ ======= -->
+    <!-- ====================================================== -->
+
+    <!-- Firebase SDK (Software Development Kit) Script'leri -->
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+
+    <!-- Kendi Firebase Başlatma Script'imiz -->
+    <script src="firebase-init.js"></script>
+    
+    <!-- Ana Uygulama Mantık Script'i -->
+    <script src="script.js"></script>
+
+    <!-- PWA için Service Worker'ı Kaydetme Script'i -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          // GITHUB PAGES İÇİN YOL DÜZELTİLDİ:
+          navigator.serviceWorker.register('/borc-program/sw.js').then(registration => {
+            console.log('Service Worker başarıyla kaydedildi.', registration);
+          }).catch(registrationError => {
+            console.log('Service Worker kaydı başarısız oldu: ', registrationError);
+          });
+        });
+      }
+    </script>
+    
+    <!-- ====================================================== -->
+    <!-- ==== FIREBASE VE UYGULAMA SCRIPTLERI BİTİŞ =========== -->
+    <!-- ====================================================== -->
+
+</body>
+</html>
