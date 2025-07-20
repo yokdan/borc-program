@@ -1,4 +1,4 @@
-// script.js (Otomatik Taksit Tarihi İlerletme Özelliği Eklenmiş Sürüm)
+// script.js (Otomatik Taksit Tarihi İlerletme Hatası Düzeltilmiş Sürüm)
 
 // =================================
 // GLOBAL DEĞİŞKENLER
@@ -22,7 +22,6 @@ function formatDate(d) {
     return dateObj.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
-// VAPID anahtarını doğru formata çevirmek için yardımcı fonksiyon
 function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - base64String.length % 4) % 4);
     const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -34,192 +33,38 @@ function urlBase64ToUint8Array(base64String) {
     return outputArray;
 }
 
-// === YENİ: Otomatik Taksit Tarihi Hesaplama Fonksiyonu ===
+// === YENİ VE DÜZELTİLMİŞ: Otomatik Taksit Tarihi Hesaplama Fonksiyonu ===
 function getNextPaymentDate(borc) {
     if (!borc.sonTarih || !borc.sonTarih.toDate) {
-        return null; // Eğer tarih verisi yoksa veya formatı yanlışsa null döndür
+        return null; // Geçerli bir başlangıç tarihi yoksa, hesaplama yapma
     }
+
+    // Firestore'dan gelen ilk taksit tarihini al
     const ilkOdemeTarihi = borc.sonTarih.toDate();
-    const odenenTaksitSayisi = Math.floor(borc.odenenTaksit);
-
-    if (odenenTaksitSayisi >= borc.taksitSayisi && borc.kalanTutar < 0.01) {
-        // Tüm taksitler ödenmişse, son taksitin tarihini göster
-        const sonTaksitTarihi = new Date(ilkOdemeTarihi);
-        sonTaksitTarihi.setMonth(ilkOdemeTarihi.getMonth() + borc.taksitSayisi - 1);
-        return sonTaksitTarihi;
-    }
-
-    // Bir sonraki ödeme, ilk ödeme tarihine ödenen taksit sayısı kadar ay eklenerek bulunur
-    const sonrakiOdemeTarihi = new Date(ilkOdemeTarihi);
-    sonrakiOdemeTarihi.setMonth(ilkOdemeTarihi.getMonth() + odenenTaksitSayisi);
     
-    // Eğer hesaplanan tarih geçmişte kaldıysa (yani bu ayki ödeme yapılmışsa), bir sonraki aya geç
-    const bugun = new Date();
-    bugun.setHours(23, 59, 59, 999); // Günün sonunu baz alarak kontrol et
-    if (sonrakiOdemeTarihi < bugun && borc.kalanTutar > 0.01) {
-        sonrakiOdemeTarihi.setMonth(ilkOdemeTarihi.getMonth() + odenenTaksitSayisi + 1);
+    // Kaç tam taksitin ödendiğini hesapla
+    const odenenTaksitAdedi = Math.floor(borc.odenenTaksit);
+
+    // Eğer tüm taksitler ödenmişse, son taksitin ödeme tarihini göster
+    if (odenenTaksitAdedi >= borc.taksitSayisi) {
+        const sonOdemeTarihi = new Date(ilkOdemeTarihi);
+        sonOdemeTarihi.setMonth(ilkOdemeTarihi.getMonth() + borc.taksitSayisi - 1);
+        return sonOdemeTarihi;
     }
+
+    // Bir sonraki ödeme tarihi, ilk ödeme tarihine "ödenen taksit adedi" kadar ay eklenerek bulunur.
+    // Örnek: 0 taksit ödendiyse, 0 ay eklenir -> ilk taksit tarihi.
+    // Örnek: 1 taksit ödendiyse, 1 ay eklenir -> ikinci taksit tarihi.
+    const sonrakiOdemeTarihi = new Date(ilkOdemeTarihi);
+    sonrakiOdemeTarihi.setMonth(ilkOdemeTarihi.getMonth() + odenenTaksitAdedi);
 
     return sonrakiOdemeTarihi;
 }
 
-
 // =================================
 // SAYFA YÖNETİMİ ve DİĞER FONKSİYONLAR...
-// (Bu kısımlarda değişiklik yok)
+// (Bu kısımlarda ve diğer fonksiyonlarda değişiklik yok, sadece güncel hallerini koruyoruz)
 // =================================
-document.addEventListener('DOMContentLoaded', () => { /* ... */ });
-function openTab(event, tabName) { /* ... */ }
-function signInWithGoogle() { /* ... */ }
-function signOutUser() { /* ... */ }
-function loadAllData() { /* ... */ }
-async function subscribeToNotifications() { /* ... */ }
-async function saveSubscription() { /* ... */ }
-function recalculateTotalsAndRender() { /* ... */ }
-function updateAnaSayfaOzet(toplamGelir, birikimFonu, borcFonu, borclarData, hedeflerData) { /* ... */ }
-function cizGrafigi(birikim, borc, harcama) { /* ... */ }
-function gelirEkleDuzenle() { /* ... */ }
-function gelirSil(id) { /* ... */ }
-function renderGelirler(gelirlerData) { /* ... */ }
-// =================================
-// BORÇ YÖNETİMİ (Değişiklikler burada)
-// =================================
-
-// borcEkleDuzenle fonksiyonunda değişiklik yok
-function borcEkleDuzenle() {
-    if (!currentUser) return alert("Lütfen önce giriş yapın.");
-    const kategori = document.getElementById('borcKategoriInput').value.trim();
-    const toplamTutar = parseFloat(document.getElementById('borcTutar').value);
-    const taksitSayisi = parseInt(document.getElementById('taksitSayisi').value);
-    const sonTarih = document.getElementById('borcSonTarih').value; // Bu artık "İlk Taksit Tarihi" olarak işlev görecek
-    if (!kategori || isNaN(toplamTutar) || toplamTutar <= 0 || isNaN(taksitSayisi) || taksitSayisi < 1 || !sonTarih) return alert("Lütfen tüm alanları doğru doldurun.");
-
-    const yeniBorc = { userId: currentUser.uid, kategori, toplamTutar, kalanTutar: toplamTutar, taksitSayisi, aylikTaksitTutari: toplamTutar / taksitSayisi, odenenTaksit: 0, sonTarih: new Date(sonTarih), buAyYapilanOdemeler: [] };
-    db.collection('borclar').add(yeniBorc).then(() => {
-        document.getElementById('borcKategoriInput').value = ''; document.getElementById('borcTutar').value = ''; document.getElementById('taksitSayisi').value = '1'; document.getElementById('borcSonTarih').value = '';
-    }).catch(error => console.error("Borç eklenirken hata: ", error));
-}
-
-// odemeEkle, borcSil, odemeSil fonksiyonlarında değişiklik yok
-function odemeEkle(borcId) { /* ... */ }
-function borcSil(id) { /* ... */ }
-function odemeSil(borcId, odemeId) { /* ... */ }
-
-// === GÜNCELLENDİ: renderBorclar Fonksiyonu ===
-function renderBorclar(borclarData) {
-    const borclarListesi = document.getElementById('borclarListesi');
-    const toplamKalanBorc = borclarData.reduce((sum, b) => sum + b.kalanTutar, 0);
-    document.getElementById('toplamBorcGostergesi').innerHTML = `Toplam Borç: <strong>${formatCurrency(toplamKalanBorc)}</strong>`;
-    borclarListesi.innerHTML = '';
-    
-    const aktifBorclar = borclarData.filter(b => b.kalanTutar > 0.01);
-    const odenmisBorclar = borclarData.filter(b => b.kalanTutar <= 0.01);
-
-    aktifBorclar.sort((a, b) => {
-        const aDate = getNextPaymentDate(a);
-        const bDate = getNextPaymentDate(b);
-        // Önce aciliyet durumuna, sonra tarihe göre sırala
-        return getDebtUrgencyStatus(a, aDate).score - getDebtUrgencyStatus(b, bDate).score || (aDate ? aDate.getTime() : 0) - (bDate ? bDate.getTime() : 0);
-    }).forEach(b => borclarListesi.insertAdjacentHTML('beforeend', createBorcKartiHTML(b)));
-    
-    if (odenmisBorclar.length > 0) {
-        borclarListesi.insertAdjacentHTML('beforeend', `<hr class="ince-cizgi" style="grid-column: 1 / -1;"><h3 style="grid-column: 1 / -1; text-align: center;">Ödenmiş Borçlar</h3>`);
-        odenmisBorclar.forEach(b => borclarListesi.insertAdjacentHTML('beforeend', createBorcKartiHTML(b)));
-    }
-}
-
-// === GÜNCELLENDİ: createBorcKartiHTML Fonksiyonu ===
-function createBorcKartiHTML(b) {
-    const birSonrakiOdemeTarihi = getNextPaymentDate(b);
-    const buAyOdenenToplam = (b.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0);
-    
-    let urgency = getDebtUrgencyStatus(b, birSonrakiOdemeTarihi);
-    let durumClass = urgency.class; 
-    let durumText = urgency.text;
-
-    if (b.kalanTutar > 0.01) { 
-        if (buAyOdenenToplam >= b.aylikTaksitTutari - 0.01) { 
-            durumClass = "status-ay-odendi"; durumText = `✓ Bu Ay Ödendi`; 
-        } else if (buAyOdenenToplam > 0) { 
-            durumClass = "status-eksik-odendi"; durumText = `Eksik: ${formatCurrency(b.aylikTaksitTutari - buAyOdenenToplam)}`; 
-        } else if (!urgency.text) {
-             durumClass = "status-beklemede"; durumText = "Beklemede";
-        }
-    }
-
-    const yapilanOdemelerHTML = (b.buAyYapilanOdemeler || []).sort((a,b) => b.tarih.toDate() - a.tarih.toDate()).map(p => `<li>${formatCurrency(p.tutar)} <span class="odeme-tarihi">(${formatDate(p.tarih)})</span><button class="delete-btn" onclick="odemeSil('${b.id}', ${p.id})">x</button></li>`).join('');
-    const onerilenTutarStr = b.onerilenOdeme > 0 ? b.onerilenOdeme.toFixed(2) : '';
-    
-    return `<div class="borc-kart">
-                <div class="borc-kart-header">
-                    <h3>${b.kategori}</h3>
-                    <span class="status ${durumClass}">${durumText}</span>
-                </div>
-                <div class="borc-kart-govde">
-                    <div><span>Kalan Tutar:</span> <strong>${formatCurrency(b.kalanTutar)}</strong></div>
-                    <div><span>Aylık Taksit:</span> ${formatCurrency(b.aylikTaksitTutari)}</div>
-                    <div><span>Taksit Durumu:</span> ${Math.floor(b.odenenTaksit)} / ${b.taksitSayisi}</div>
-                    <div><span>Sonraki Ödeme:</span> ${birSonrakiOdemeTarihi ? formatDate(birSonrakiOdemeTarihi) : 'N/A'}</div>
-                </div>
-                ${b.kalanTutar < 0.01 ? `<div class="gecmis-olsun">🎉 Geçmiş Olsun! 🎉</div>` : 
-                `<div class="odeme-ekle-alani">
-                    <div class="odeme-stepper">
-                        <button class="stepper-btn" onclick="ayarlaOdeme('${b.id}', -${ODEME_ARTIS_MIKTARI})">-</button>
-                        <input type="number" id="odeme-input-${b.id}" value="${onerilenTutarStr}" placeholder="0.00">
-                        <button class="stepper-btn" onclick="ayarlaOdeme('${b.id}', ${ODEME_ARTIS_MIKTARI})">+</button>
-                    </div>
-                    <button class="onayla-btn" onclick="odemeEkle('${b.id}')">Ekle</button>
-                </div>
-                <div class="yapilan-odemeler"><ul class="yapilan-odemeler-liste">${yapilanOdemelerHTML}</ul></div>
-                <div class="borc-kart-aksiyonlar"><button class="delete-btn" onclick="borcSil('${b.id}')">Sil</button></div>`}
-            </div>`;
-}
-
-// =================================
-// HEDEF YÖNETİMİ ve DİĞER FONKSİYONLAR
-// (Bu kısımlarda değişiklik yok)
-// =================================
-function hedefEkle() { /* ... */ }
-function birikimEkle(hedefId) { /* ... */ }
-function hedefSil(id) { /* ... */ }
-function birikimOdemeSil(hedefId, odemeId) { /* ... */ }
-function renderHedefler(hedeflerData) { /* ... */ }
-function createHedefKartiHTML(hedef) { /* ... */ }
-function calculateSuggestedDebtPayments(borclarData, aylikBorcFonu) { /* ... */ }
-function calculateSuggestedSavings(hedeflerData, aylikBirikimFonu) { /* ... */ }
-
-// === GÜNCELLENDİ: getDebtUrgencyStatus Fonksiyonu ===
-function getDebtUrgencyStatus(borc, sonrakiOdemeTarihi) {
-    if (borc.kalanTutar < 0.01) return { score: 5, text: "Ödendi", class: "status-odendi" };
-    if (!sonrakiOdemeTarihi) return { score: 4, text: "", class: "" };
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const dueDate = new Date(sonrakiOdemeTarihi);
-    dueDate.setHours(0, 0, 0, 0);
-
-    const timeDiff = dueDate.getTime() - today.getTime();
-    const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-    
-    if (dayDiff < 0) return { score: 1, text: `🔴 ÖDEME ${-dayDiff} GÜN GEÇTİ!`, class: "status-acil" };
-    if (dayDiff === 0) return { score: 1, text: "🔴 BUGÜN SON GÜN!", class: "status-acil" };
-    if (dayDiff <= 3) return { score: 2, text: `⚠️ SON ${dayDiff} GÜN!`, class: "status-uyari" };
-    return { score: 3, text: "", class: "" };
-}
-
-function ayarlaOdeme(borcId, miktar) { /* ... */ }
-function ayarlaBirikim(hedefId, miktar) { /* ... */ }
-function loadSettings() { /* ... */ }
-function updateLabel(id, label) { /* ... */ }
-function ayarlariKaydet() { /* ... */ }
-function loadKategoriler() { /* ... */ }
-
-// === UYUMLULUK İÇİN KOD BLOKLARINI KOPYALA-YAPIŞTIR ===
-// Değişiklik yapılmayan fonksiyonları buraya tekrar ekleyerek
-// eksik kalma riskini ortadan kaldıralım.
-// Not: Bu fonksiyonların içeriği değişmedi, sadece script'in tam olduğundan emin olmak için buradalar.
-
 document.addEventListener('DOMContentLoaded', () => {
     loadSettings();
     loadKategoriler();
@@ -263,6 +108,79 @@ function loadAllData() {
     db.collection('hedefler').where('userId', '==', currentUser.uid).onSnapshot(snapshot => { hedefler = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); recalculateTotalsAndRender(); }, err => console.error("Hedef dinleyicisi hatası:", err));
 }
 
+async function subscribeToNotifications() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+        alert('Üzgünüz, bu tarayıcı anlık bildirimleri desteklemiyor.');
+        return;
+    }
+    try {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+            console.log('Bildirim izni alındı.');
+            await saveSubscription();
+        } else {
+            alert('Bildirim iznini reddettiniz. Hatırlatmaları alamazsınız.');
+        }
+    } catch (error) {
+        console.error('Bildirim izni istenirken hata:', error);
+    }
+}
+
+async function saveSubscription() {
+    if (!currentUser) return;
+    const VAPID_PUBLIC_KEY = 'BNOPkV07ymwVZ9X4nzIIj9ak2L2G_55tuandprswRQQ4PbvcWX3Q23Bpq_Heq01ZpMCCRE5aksVhtD5OXABembo';
+    if (!VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY.includes('SENIN_')) {
+        alert('HATA: VAPID Public Key script.js dosyasında ayarlanmamış!');
+        console.error('VAPID Public Key script.js dosyasında ayarlanmamış!');
+        return;
+    }
+    try {
+        const swRegistration = await navigator.serviceWorker.ready;
+        const subscription = await swRegistration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+        console.log('Cihaz aboneliği oluşturuldu:', subscription);
+        const subscriptionsRef = db.collection('subscriptions').doc(currentUser.uid);
+        const doc = await subscriptionsRef.get();
+        const existingSubscriptions = doc.exists ? doc.data().subscriptions : [];
+        const isAlreadySubscribed = existingSubscriptions.some(sub => sub.endpoint === subscription.toJSON().endpoint);
+        if (!isAlreadySubscribed) {
+            await subscriptionsRef.set({ 
+                subscriptions: firebase.firestore.FieldValue.arrayUnion(subscription.toJSON()) 
+            }, { merge: true });
+            console.log('Abonelik başarıyla Firestore\'a kaydedildi.');
+            alert('Bildirimler başarıyla aktive edildi!');
+        } else {
+            console.log('Bu cihaz zaten abonelik listesinde.');
+            alert('Bildirimler bu cihaz için zaten aktif!');
+        }
+    } catch (error) {
+        console.error('Abonelik oluşturulurken veya kaydedilirken hata oluştu:', error);
+        alert('Bildirimler aktive edilirken bir sorun oluştu.');
+    }
+}
+
+function recalculateTotalsAndRender() { /*...*/ }
+function updateAnaSayfaOzet(toplamGelir, birikimFonu, borcFonu, borclarData, hedeflerData) { /*...*/ }
+function cizGrafigi(birikim, borc, harcama) { /*...*/ }
+function gelirEkleDuzenle() { /*...*/ }
+function gelirSil(id) { /*...*/ }
+function renderGelirler(gelirlerData) { /*...*/ }
+
+function borcEkleDuzenle() {
+    if (!currentUser) return alert("Lütfen önce giriş yapın.");
+    const kategori = document.getElementById('borcKategoriInput').value.trim();
+    const toplamTutar = parseFloat(document.getElementById('borcTutar').value);
+    const taksitSayisi = parseInt(document.getElementById('taksitSayisi').value);
+    const sonTarih = document.getElementById('borcSonTarih').value;
+    if (!kategori || isNaN(toplamTutar) || toplamTutar <= 0 || isNaN(taksitSayisi) || taksitSayisi < 1 || !sonTarih) return alert("Lütfen tüm alanları doğru doldurun.");
+    const yeniBorc = { userId: currentUser.uid, kategori, toplamTutar, kalanTutar: toplamTutar, taksitSayisi, aylikTaksitTutari: toplamTutar / taksitSayisi, odenenTaksit: 0, sonTarih: new Date(sonTarih), buAyYapilanOdemeler: [] };
+    db.collection('borclar').add(yeniBorc).then(() => {
+        document.getElementById('borcKategoriInput').value = ''; document.getElementById('borcTutar').value = ''; document.getElementById('taksitSayisi').value = '1'; document.getElementById('borcSonTarih').value = '';
+    }).catch(error => console.error("Borç eklenirken hata: ", error));
+}
+
 function odemeEkle(borcId) {
     const input = document.getElementById(`odeme-input-${borcId}`);
     let odemeMiktari = parseFloat(input.value);
@@ -278,92 +196,99 @@ function odemeEkle(borcId) {
         t.update(borcRef, { kalanTutar: yeniKalan, odenenTaksit: yeniOdenenTaksit, buAyYapilanOdemeler: yeniOdemeler });
     }));
 }
-function borcSil(id) { if (!confirm("Bu borcu kalıcı olarak silmek istediğinizden emin misiniz?")) return; db.collection('borclar').doc(id).delete(); }
-function odemeSil(borcId, odemeId) {
-    const borcRef = db.collection('borclar').doc(borcId);
-    db.runTransaction(t => t.get(borcRef).then(doc => {
-        if (!doc.exists) throw "Borç bulunamadı!";
-        const borc = doc.data();
-        const odeme = (borc.buAyYapilanOdemeler || []).find(p => p.id === odemeId);
-        if (!odeme) return;
-        const yeniKalan = borc.kalanTutar + odeme.tutar;
-        const yeniOdenenTaksit = borc.odenenTaksit - (odeme.tutar / borc.aylikTaksitTutari);
-        const yeniOdemeler = borc.buAyYapilanOdemeler.filter(p => p.id !== odemeId);
-        t.update(borcRef, { kalanTutar: yeniKalan, odenenTaksit: yeniOdenenTaksit, buAyYapilanOdemeler: yeniOdemeler });
-    }));
+
+function borcSil(id) { /*...*/ }
+function odemeSil(borcId, odemeId) { /*...*/ }
+
+function renderBorclar(borclarData) {
+    const borclarListesi = document.getElementById('borclarListesi');
+    const toplamKalanBorc = borclarData.reduce((sum, b) => sum + b.kalanTutar, 0);
+    document.getElementById('toplamBorcGostergesi').innerHTML = `Toplam Borç: <strong>${formatCurrency(toplamKalanBorc)}</strong>`;
+    borclarListesi.innerHTML = '';
+    const aktifBorclar = borclarData.filter(b => b.kalanTutar > 0.01);
+    const odenmisBorclar = borclarData.filter(b => b.kalanTutar <= 0.01);
+    aktifBorclar.sort((a, b) => {
+        const aDate = getNextPaymentDate(a);
+        const bDate = getNextPaymentDate(b);
+        return getDebtUrgencyStatus(a, aDate).score - getDebtUrgencyStatus(b, bDate).score || (aDate ? aDate.getTime() : 0) - (bDate ? bDate.getTime() : 0);
+    }).forEach(b => borclarListesi.insertAdjacentHTML('beforeend', createBorcKartiHTML(b)));
+    if (odenmisBorclar.length > 0) {
+        borclarListesi.insertAdjacentHTML('beforeend', `<hr class="ince-cizgi" style="grid-column: 1 / -1;"><h3 style="grid-column: 1 / -1; text-align: center;">Ödenmiş Borçlar</h3>`);
+        odenmisBorclar.forEach(b => borclarListesi.insertAdjacentHTML('beforeend', createBorcKartiHTML(b)));
+    }
 }
-function hedefEkle() {
-    if (!currentUser) return alert("Lütfen önce giriş yapın.");
-    const ad = document.getElementById('hedefAdi').value.trim();
-    const hedefTutar = parseFloat(document.getElementById('hedefTutar').value);
-    if (!ad || isNaN(hedefTutar) || hedefTutar <= 0) return alert("Geçerli hedef adı ve tutarı girin.");
-    db.collection('hedefler').add({ userId: currentUser.uid, ad, hedefTutar, biriken: 0, buAyYapilanOdemeler: [] })
-      .then(() => {
-          document.getElementById('hedefAdi').value = ''; document.getElementById('hedefTutar').value = '';
-      }).catch(err => console.error("Hedef ekleme hatası: ", err));
+
+function createBorcKartiHTML(b) {
+    const birSonrakiOdemeTarihi = getNextPaymentDate(b);
+    const buAyOdenenToplam = (b.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0);
+    let urgency = getDebtUrgencyStatus(b, birSonrakiOdemeTarihi);
+    let durumClass = urgency.class; 
+    let durumText = urgency.text;
+    if (b.kalanTutar > 0.01) { 
+        if (buAyOdenenToplam >= b.aylikTaksitTutari - 0.01) { 
+            durumClass = "status-ay-odendi"; durumText = `✓ Bu Ay Ödendi`; 
+        } else if (buAyOdenenToplam > 0) { 
+            durumClass = "status-eksik-odendi"; durumText = `Eksik: ${formatCurrency(b.aylikTaksitTutari - buAyOdenenToplam)}`; 
+        } else if (!urgency.text) {
+             durumClass = "status-beklemede"; durumText = "Beklemede";
+        }
+    }
+    const yapilanOdemelerHTML = (b.buAyYapilanOdemeler || []).sort((a,b) => b.tarih.toDate() - a.tarih.toDate()).map(p => `<li>${formatCurrency(p.tutar)} <span class="odeme-tarihi">(${formatDate(p.tarih)})</span><button class="delete-btn" onclick="odemeSil('${b.id}', ${p.id})">x</button></li>`).join('');
+    const onerilenTutarStr = b.onerilenOdeme > 0 ? b.onerilenOdeme.toFixed(2) : '';
+    return `<div class="borc-kart"><div class="borc-kart-header"><h3>${b.kategori}</h3><span class="status ${durumClass}">${durumText}</span></div><div class="borc-kart-govde"><div><span>Kalan Tutar:</span> <strong>${formatCurrency(b.kalanTutar)}</strong></div><div><span>Aylık Taksit:</span> ${formatCurrency(b.aylikTaksitTutari)}</div><div><span>Taksit Durumu:</span> ${Math.floor(b.odenenTaksit)} / ${b.taksitSayisi}</div><div><span>Sonraki Ödeme:</span> ${birSonrakiOdemeTarihi ? formatDate(birSonrakiOdemeTarihi) : 'N/A'}</div></div>${b.kalanTutar < 0.01 ? `<div class="gecmis-olsun">🎉 Geçmiş Olsun! 🎉</div>` : `<div class="odeme-ekle-alani"><div class="odeme-stepper"><button class="stepper-btn" onclick="ayarlaOdeme('${b.id}', -${ODEME_ARTIS_MIKTARI})">-</button><input type="number" id="odeme-input-${b.id}" value="${onerilenTutarStr}" placeholder="0.00"><button class="stepper-btn" onclick="ayarlaOdeme('${b.id}', ${ODEME_ARTIS_MIKTARI})">+</button></div><button class="onayla-btn" onclick="odemeEkle('${b.id}')">Ekle</button></div><div class="yapilan-odemeler"><ul class="yapilan-odemeler-liste">${yapilanOdemelerHTML}</ul></div><div class="borc-kart-aksiyonlar"><button class="delete-btn" onclick="borcSil('${b.id}')">Sil</button></div>`}</div>`;
 }
-function birikimEkle(hedefId) {
-    const input = document.getElementById(`birikim-input-${hedefId}`);
-    const tutar = parseFloat(input.value);
-    if (isNaN(tutar) || tutar <= 0) return alert("Geçerli bir sayı girin.");
-    const hedefRef = db.collection('hedefler').doc(hedefId);
-    db.runTransaction(t => t.get(hedefRef).then(doc => {
-        if (!doc.exists) throw "Hedef bulunamadı!";
-        const hedef = doc.data();
-        const eklenecekTutar = Math.min(tutar, hedef.hedefTutar - hedef.biriken);
-        const yeniBiriken = hedef.biriken + eklenecekTutar;
-        const yeniOdemeler = [...(hedef.buAyYapilanOdemeler || []), { id: Date.now(), tutar: eklenecekTutar, tarih: new Date(), type: 'manual' }];
-        t.update(hedefRef, { biriken: yeniBiriken, buAyYapilanOdemeler: yeniOdemeler });
-    }));
+
+function hedefEkle() { /*...*/ }
+function birikimEkle(hedefId) { /*...*/ }
+function hedefSil(id) { /*...*/ }
+function birikimOdemeSil(hedefId, odemeId) { /*...*/ }
+function renderHedefler(hedeflerData) { /*...*/ }
+function createHedefKartiHTML(hedef) { /*...*/ }
+function calculateSuggestedDebtPayments(borclarData, aylikBorcFonu) { /*...*/ }
+function calculateSuggestedSavings(hedeflerData, aylikBirikimFonu) { /*...*/ }
+
+function getDebtUrgencyStatus(borc, sonrakiOdemeTarihi) {
+    if (borc.kalanTutar < 0.01) return { score: 5, text: "Ödendi", class: "status-odendi" };
+    if (!sonrakiOdemeTarihi) return { score: 4, text: "", class: "" };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(sonrakiOdemeTarihi);
+    dueDate.setHours(0, 0, 0, 0);
+    const timeDiff = dueDate.getTime() - today.getTime();
+    const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    if (dayDiff < 0) return { score: 1, text: `🔴 ÖDEME ${-dayDiff} GÜN GEÇTİ!`, class: "status-acil" };
+    if (dayDiff === 0) return { score: 1, text: "🔴 BUGÜN SON GÜN!", class: "status-acil" };
+    if (dayDiff <= 3) return { score: 2, text: `⚠️ SON ${dayDiff} GÜN!`, class: "status-uyari" };
+    return { score: 3, text: "", class: "" };
 }
-function hedefSil(id) { if (!confirm("Bu hedefi silmek istediğinizden emin misiniz?")) return; db.collection('hedefler').doc(id).delete(); }
-function birikimOdemeSil(hedefId, odemeId) {
-    const hedefRef = db.collection('hedefler').doc(hedefId);
-    db.runTransaction(t => t.get(hedefRef).then(doc => {
-        if (!doc.exists) throw "Hedef bulunamadı!";
-        const hedef = doc.data();
-        const odeme = (hedef.buAyYapilanOdemeler || []).find(p => p.id === odemeId);
-        if (!odeme) return;
-        const yeniBiriken = hedef.biriken - odeme.tutar;
-        const yeniOdemeler = hedef.buAyYapilanOdemeler.filter(p => p.id !== odemeId);
-        t.update(hedefRef, { biriken: yeniBiriken, buAyYapilanOdemeler: yeniOdemeler });
-    }));
-}
-function renderHedefler(hedeflerData) {
-    const liste = document.getElementById('hedeflerListesi');
-    liste.innerHTML = '';
-    hedeflerData.sort((a, b) => (a.hedefTutar - a.biriken) - (b.hedefTutar - b.biriken))
-        .forEach(h => liste.insertAdjacentHTML('beforeend', createHedefKartiHTML(h)));
-}
-function createHedefKartiHTML(hedef) {
-    const yuzde = hedef.hedefTutar > 0 ? (hedef.biriken / hedef.hedefTutar) * 100 : 0;
-    const yapilanOdemelerHTML = (hedef.buAyYapilanOdemeler || []).sort((a,b) => b.tarih.toDate() - a.tarih.toDate()).map(p => `<li>${formatCurrency(p.tutar)} <span class="odeme-tarihi">(${formatDate(p.tarih)})</span><button class="delete-btn" onclick="birikimOdemeSil('${hedef.id}', ${p.id})">x</button></li>`).join('');
-    const onerilenBirikimStr = hedef.onerilenBirikim > 0 ? hedef.onerilenBirikim.toFixed(2) : '';
-    return `<div class="hedef-kart"><h3>${hedef.ad}</h3><p><strong>${formatCurrency(hedef.biriken)}</strong> / ${formatCurrency(hedef.hedefTutar)}</p><div class="progress-bar"><div class="progress-bar-inner" style="width: ${Math.min(yuzde, 100)}%;">${yuzde.toFixed(1)}%</div></div>${hedef.biriken >= hedef.hedefTutar ? `<div class="gecmis-olsun">🎉 Hedefe Ulaşıldı! 🎉</div>` : `<div class="odeme-ekle-alani"><div class="odeme-stepper"><button class="stepper-btn" onclick="ayarlaBirikim('${hedef.id}', -${ODEME_ARTIS_MIKTARI})">-</button><input type="number" id="birikim-input-${hedef.id}" value="${onerilenBirikimStr}" placeholder="0.00"><button class="stepper-btn" onclick="ayarlaBirikim('${hedef.id}', ${ODEME_ARTIS_MIKTARI})">+</button></div><button class="onayla-btn" onclick="birikimEkle('${hedef.id}')">Ekle</button></div><div class="yapilan-odemeler" style="margin-top:10px;"><ul class="yapilan-odemeler-liste">${yapilanOdemelerHTML}</ul></div><div class="hedef-butonlar"><button class="delete-btn" onclick="hedefSil('${hedef.id}')">Sil</button></div>`}</div>`;
-}
-function calculateSuggestedDebtPayments(borclarData, aylikBorcFonu) {
-    borclarData.forEach(b => b.onerilenOdeme = 0);
-    const toplamManuelOdeme = borclarData.reduce((sum, b) => sum + (b.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), 0);
-    let kalanDagitilacakFon = aylikBorcFonu - toplamManuelOdeme;
-    if (kalanDagitilacakFon <= 0) return borclarData;
-    const aktifBorclar = borclarData.filter(b => b.kalanTutar > 0.01).sort((a, b) => a.kalanTutar - b.kalanTutar);
-    for (const borc of aktifBorclar) { if (kalanDagitilacakFon <= 0) break; const buAyOdenen = (borc.buAyYapilanOdemeler || []).reduce((sum, p) => sum + p.tutar, 0); const taksitOdemeHedefi = borc.aylikTaksitTutari - buAyOdenen; if (taksitOdemeHedefi > 0) { const odenecekTutar = Math.min(borc.kalanTutar, kalanDagitilacakFon, taksitOdemeHedefi); if (odenecekTutar > 0) { borc.onerilenOdeme += odenecekTutar; kalanDagitilacakFon -= odenecekTutar; } } }
-    if (kalanDagitilacakFon > 0) { for (const borc of aktifBorclar) { if (kalanDagitilacakFon <= 0) break; const odenecekEkTutar = Math.min(borc.kalanTutar - (borc.onerilenOdeme || 0) - (borc.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), kalanDagitilacakFon); if (odenecekEkTutar > 0) { borc.onerilenOdeme += odenecekEkTutar; kalanDagitilacakFon -= odenecekEkTutar; } } }
-    return borclarData;
-}
-function calculateSuggestedSavings(hedeflerData, aylikBirikimFonu) {
-    hedeflerData.forEach(h => h.onerilenBirikim = 0);
-    const toplamManuelOdeme = hedeflerData.reduce((sum, h) => sum + (h.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), 0);
-    let kalanDagitilacakFon = aylikBirikimFonu - toplamManuelOdeme;
-    if (kalanDagitilacakFon <= 0) return hedeflerData;
-    const aktifHedefler = hedeflerData.filter(h => h.biriken < h.hedefTutar);
-    const toplamKalanHedef = aktifHedefler.reduce((sum, h) => sum + (h.hedefTutar - h.biriken), 0);
-    if (toplamKalanHedef > 0) { for (const hedef of aktifHedefler) { const hedefeKalan = hedef.hedefTutar - hedef.biriken; const oran = hedefeKalan / toplamKalanHedef; const odenecekTutar = Math.min(hedefeKalan, kalanDagitilacakFon * oran); if (odenecekTutar > 0) { hedef.onerilenBirikim += odenecekTutar; } } }
-    return hedeflerData;
-}
-function ayarlaOdeme(borcId, miktar) { const input = document.getElementById(`odeme-input-${borcId}`); let mevcut = parseFloat(input.value) || 0; let yeni = mevcut + miktar; if (yeni < 0) yeni = 0; input.value = yeni.toFixed(2); }
-function ayarlaBirikim(hedefId, miktar) { const input = document.getElementById(`birikim-input-${hedefId}`); let mevcut = parseFloat(input.value) || 0; let yeni = mevcut + miktar; if (yeni < 0) yeni = 0; input.value = yeni.toFixed(2); }
-function loadSettings() { const a = JSON.parse(localStorage.getItem('butceAyarlari')) || { birikim: 20, borc: 20 }; document.getElementById('birikimOrani').value = a.birikim; document.getElementById('borcOrani').value = a.borc; updateLabel('birikimOrani', 'birikimOraniLabel'); updateLabel('borcOrani', 'borcOraniLabel'); }
-function updateLabel(id, label) { document.getElementById(label).textContent = document.getElementById(id).value; }
-function ayarlariKaydet() { const ayarlar = { birikim: document.getElementById('birikimOrani').value, borc: document.getElementById('borcOrani').value }; localStorage.setItem('butceAyarlari', JSON.stringify(ayarlar)); alert("Ayarlar Kaydedildi!"); recalculateTotalsAndRender(); }
-function loadKategoriler() { const datalist = document.getElementById('kategoriListesi'); datalist.innerHTML = ''; defaultKategoriler.forEach(k => { const option = document.createElement('option'); option.value = k; datalist.appendChild(option); }); }
+
+function ayarlaOdeme(borcId, miktar) { /*...*/ }
+function ayarlaBirikim(hedefId, miktar) { /*...*/ }
+function loadSettings() { /*...*/ }
+function updateLabel(id, label) { /*...*/ }
+function ayarlariKaydet() { /*...*/ }
+function loadKategoriler() { /*...*/ }
+
+// Fonksiyonların tam sürümlerini kopyalayıp yapıştırarak eksiklik kalmamasını sağlıyorum.
+recalculateTotalsAndRender = function() { const ayarlar = JSON.parse(localStorage.getItem('butceAyarlari')) || { birikim: 20, borc: 20 }; const toplamGelir = gelirler.reduce((sum, g) => sum + g.tutar, 0); const aylikToplamBorcFonu = toplamGelir * (ayarlar.borc / 100); const aylikToplamBirikimFonu = toplamGelir * (ayarlar.birikim / 100); const guncelBorclar = calculateSuggestedDebtPayments([...borclar], aylikToplamBorcFonu); const guncelHedefler = calculateSuggestedSavings([...hedefler], aylikToplamBirikimFonu); updateAnaSayfaOzet(toplamGelir, aylikToplamBirikimFonu, aylikToplamBorcFonu, guncelBorclar, guncelHedefler); renderBorclar(guncelBorclar); renderHedefler(guncelHedefler); }
+updateAnaSayfaOzet = function(toplamGelir, birikimFonu, borcFonu, borclarData, hedeflerData) { const ayarlar = JSON.parse(localStorage.getItem('butceAyarlari')) || { birikim: 20, borc: 20 }; const toplamBorcOdeme = borclarData.reduce((sum, b) => sum + (b.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), 0); const kullanilabilirBorcFonu = borcFonu - toplamBorcOdeme; document.getElementById('kullanilabilirFonGostergesi').innerHTML = `Kullanılabilir Fon: <strong>${formatCurrency(kullanilabilirBorcFonu)}</strong>`; const toplamHedefTutari = hedeflerData.reduce((sum, h) => sum + h.hedefTutar, 0); const toplamBirikim = hedeflerData.reduce((sum, h) => sum + (h.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), 0); const kullanilabilirBirikimFonu = birikimFonu - toplamBirikim; document.getElementById('toplamHedefGostergesi').innerHTML = `Toplam Hedef: <strong>${formatCurrency(toplamHedefTutari)}</strong>`; document.getElementById('kullanilabilirBirikimFonuGostergesi').innerHTML = `Kullanılabilir Fon: <strong>${formatCurrency(kullanilabilirBirikimFonu)}</strong>`; const kalanHarcama = toplamGelir - borcFonu - birikimFonu; document.getElementById('toplamGelirOzet').innerHTML = `Aylık Toplam Gelir: <strong>${formatCurrency(toplamGelir)}</strong>`; document.getElementById('borcSonuc').innerHTML = `Ayrılan Borç Fonu (%${(ayarlar.borc || 20)}): <strong>${formatCurrency(borcFonu)}</strong>`; document.getElementById('birikimSonuc').innerHTML = `Ayrılan Birikim Fonu (%${(ayarlar.birikim || 20)}): <strong>${formatCurrency(birikimFonu)}</strong>`; document.getElementById('harcamaSonuc').innerHTML = `Kalan Harcama Bütçesi: <strong>${formatCurrency(kalanHarcama)}</strong>`; cizGrafigi(toplamBirikim, toplamBorcOdeme, toplamGelir - toplamBirikim - toplamBorcOdeme); }
+cizGrafigi = function(birikim, borc, harcama) { if(document.getElementById('butceGrafigi')) { const ctx = document.getElementById('butceGrafigi').getContext('2d'); if (butceGrafigi) { butceGrafigi.destroy(); } butceGrafigi = new Chart(ctx, { type: 'pie', data: { labels: ['Yapılan Birikim', 'Yapılan Borç Ödemeleri', 'Kalan Bütçe'], datasets: [{ data: [birikim, borc, Math.max(0, harcama)], backgroundColor: ['#28a745', '#dc3545', '#007bff'], borderColor: ['#fff'], borderWidth: 2 }] }, options: { responsive: true, plugins: { legend: { position: 'top' } } } }); } }
+gelirEkleDuzenle = function() { if (!currentUser) return alert("Lütfen önce giriş yapın."); const aciklama = document.getElementById('gelirAciklama').value.trim(); const tutar = parseFloat(document.getElementById('gelirTutar').value); if (!aciklama || isNaN(tutar) || tutar <= 0) return alert("Geçerli bir açıklama ve tutar girin."); db.collection('gelirler').add({ userId: currentUser.uid, aciklama, tutar, tarih: new Date() }).then(() => { document.getElementById('gelirAciklama').value = ''; document.getElementById('gelirTutar').value = ''; }).catch(err => console.error("Gelir ekleme hatası: ", err)); }
+gelirSil = function(id) { if (!confirm("Bu geliri silmek istediğinizden emin misiniz?")) return; db.collection('gelirler').doc(id).delete(); }
+renderGelirler = function(gelirlerData) { const tabloBody = document.querySelector("#gelirlerTablosu tbody"); tabloBody.innerHTML = ''; gelirlerData.sort((a,b) => b.tarih.toDate() - a.tarih.toDate()).forEach(g => { const tr = document.createElement('tr'); tr.innerHTML = `<td>${g.aciklama}</td><td>${formatCurrency(g.tutar)}</td><td><button class="delete-btn" onclick="gelirSil('${g.id}')">Sil</button></td>`; tabloBody.appendChild(tr); }); }
+borcSil = function(id) { if (!confirm("Bu borcu kalıcı olarak silmek istediğinizden emin misiniz?")) return; db.collection('borclar').doc(id).delete(); }
+odemeSil = function(borcId, odemeId) { const borcRef = db.collection('borclar').doc(borcId); db.runTransaction(t => t.get(borcRef).then(doc => { if (!doc.exists) throw "Borç bulunamadı!"; const borc = doc.data(); const odeme = (borc.buAyYapilanOdemeler || []).find(p => p.id === odemeId); if (!odeme) return; const yeniKalan = borc.kalanTutar + odeme.tutar; const yeniOdenenTaksit = borc.odenenTaksit - (odeme.tutar / borc.aylikTaksitTutari); const yeniOdemeler = borc.buAyYapilanOdemeler.filter(p => p.id !== odemeId); t.update(borcRef, { kalanTutar: yeniKalan, odenenTaksit: yeniOdenenTaksit, buAyYapilanOdemeler: yeniOdemeler }); })); }
+hedefEkle = function() { if (!currentUser) return alert("Lütfen önce giriş yapın."); const ad = document.getElementById('hedefAdi').value.trim(); const hedefTutar = parseFloat(document.getElementById('hedefTutar').value); if (!ad || isNaN(hedefTutar) || hedefTutar <= 0) return alert("Geçerli hedef adı ve tutarı girin."); db.collection('hedefler').add({ userId: currentUser.uid, ad, hedefTutar, biriken: 0, buAyYapilanOdemeler: [] }).then(() => { document.getElementById('hedefAdi').value = ''; document.getElementById('hedefTutar').value = ''; }).catch(err => console.error("Hedef ekleme hatası: ", err)); }
+birikimEkle = function(hedefId) { const input = document.getElementById(`birikim-input-${hedefId}`); const tutar = parseFloat(input.value); if (isNaN(tutar) || tutar <= 0) return alert("Geçerli bir sayı girin."); const hedefRef = db.collection('hedefler').doc(hedefId); db.runTransaction(t => t.get(hedefRef).then(doc => { if (!doc.exists) throw "Hedef bulunamadı!"; const hedef = doc.data(); const eklenecekTutar = Math.min(tutar, hedef.hedefTutar - hedef.biriken); const yeniBiriken = hedef.biriken + eklenecekTutar; const yeniOdemeler = [...(hedef.buAyYapilanOdemeler || []), { id: Date.now(), tutar: eklenecekTutar, tarih: new Date(), type: 'manual' }]; t.update(hedefRef, { biriken: yeniBiriken, buAyYapilanOdemeler: yeniOdemeler }); })); }
+hedefSil = function(id) { if (!confirm("Bu hedefi silmek istediğinizden emin misiniz?")) return; db.collection('hedefler').doc(id).delete(); }
+birikimOdemeSil = function(hedefId, odemeId) { const hedefRef = db.collection('hedefler').doc(hedefId); db.runTransaction(t => t.get(hedefRef).then(doc => { if (!doc.exists) throw "Hedef bulunamadı!"; const hedef = doc.data(); const odeme = (hedef.buAyYapilanOdemeler || []).find(p => p.id === odemeId); if (!odeme) return; const yeniBiriken = hedef.biriken - odeme.tutar; const yeniOdemeler = hedef.buAyYapilanOdemeler.filter(p => p.id !== odemeId); t.update(hedefRef, { biriken: yeniBiriken, buAyYapilanOdemeler: yeniOdemeler }); })); }
+renderHedefler = function(hedeflerData) { const liste = document.getElementById('hedeflerListesi'); liste.innerHTML = ''; hedeflerData.sort((a, b) => (a.hedefTutar - a.biriken) - (b.hedefTutar - b.biriken)) .forEach(h => liste.insertAdjacentHTML('beforeend', createHedefKartiHTML(h))); }
+createHedefKartiHTML = function(hedef) { const yuzde = hedef.hedefTutar > 0 ? (hedef.biriken / hedef.hedefTutar) * 100 : 0; const yapilanOdemelerHTML = (hedef.buAyYapilanOdemeler || []).sort((a,b) => b.tarih.toDate() - a.tarih.toDate()).map(p => `<li>${formatCurrency(p.tutar)} <span class="odeme-tarihi">(${formatDate(p.tarih)})</span><button class="delete-btn" onclick="birikimOdemeSil('${hedef.id}', ${p.id})">x</button></li>`).join(''); const onerilenBirikimStr = hedef.onerilenBirikim > 0 ? hedef.onerilenBirikim.toFixed(2) : ''; return `<div class="hedef-kart"><h3>${hedef.ad}</h3><p><strong>${formatCurrency(hedef.biriken)}</strong> / ${formatCurrency(hedef.hedefTutar)}</p><div class="progress-bar"><div class="progress-bar-inner" style="width: ${Math.min(yuzde, 100)}%;">${yuzde.toFixed(1)}%</div></div>${hedef.biriken >= hedef.hedefTutar ? `<div class="gecmis-olsun">🎉 Hedefe Ulaşıldı! 🎉</div>` : `<div class="odeme-ekle-alani"><div class="odeme-stepper"><button class="stepper-btn" onclick="ayarlaBirikim('${hedef.id}', -${ODEME_ARTIS_MIKTARI})">-</button><input type="number" id="birikim-input-${hedef.id}" value="${onerilenBirikimStr}" placeholder="0.00"><button class="stepper-btn" onclick="ayarlaBirikim('${hedef.id}', ${ODEME_ARTIS_MIKTARI})">+</button></div><button class="onayla-btn" onclick="birikimEkle('${hedef.id}')">Ekle</button></div><div class="yapilan-odemeler" style="margin-top:10px;"><ul class="yapilan-odemeler-liste">${yapilanOdemelerHTML}</ul></div><div class="hedef-butonlar"><button class="delete-btn" onclick="hedefSil('${hedef.id}')">Sil</button></div>`}</div>`; }
+calculateSuggestedDebtPayments = function(borclarData, aylikBorcFonu) { borclarData.forEach(b => b.onerilenOdeme = 0); const toplamManuelOdeme = borclarData.reduce((sum, b) => sum + (b.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), 0); let kalanDagitilacakFon = aylikBorcFonu - toplamManuelOdeme; if (kalanDagitilacakFon <= 0) return borclarData; const aktifBorclar = borclarData.filter(b => b.kalanTutar > 0.01).sort((a, b) => a.kalanTutar - b.kalanTutar); for (const borc of aktifBorclar) { if (kalanDagitilacakFon <= 0) break; const buAyOdenen = (borc.buAyYapilanOdemeler || []).reduce((sum, p) => sum + p.tutar, 0); const taksitOdemeHedefi = borc.aylikTaksitTutari - buAyOdenen; if (taksitOdemeHedefi > 0) { const odenecekTutar = Math.min(borc.kalanTutar, kalanDagitilacakFon, taksitOdemeHedefi); if (odenecekTutar > 0) { borc.onerilenOdeme += odenecekTutar; kalanDagitilacakFon -= odenecekTutar; } } } if (kalanDagitilacakFon > 0) { for (const borc of aktifBorclar) { if (kalanDagitilacakFon <= 0) break; const odenecekEkTutar = Math.min(borc.kalanTutar - (borc.onerilenOdeme || 0) - (borc.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), kalanDagitilacakFon); if (odenecekEkTutar > 0) { borc.onerilenOdeme += odenecekEkTutar; kalanDagitilacakFon -= odenecekEkTutar; } } } return borclarData; }
+calculateSuggestedSavings = function(hedeflerData, aylikBirikimFonu) { hedeflerData.forEach(h => h.onerilenBirikim = 0); const toplamManuelOdeme = hedeflerData.reduce((sum, h) => sum + (h.buAyYapilanOdemeler || []).reduce((s, p) => s + p.tutar, 0), 0); let kalanDagitilacakFon = aylikBirikimFonu - toplamManuelOdeme; if (kalanDagitilacakFon <= 0) return hedeflerData; const aktifHedefler = hedeflerData.filter(h => h.biriken < h.hedefTutar); const toplamKalanHedef = aktifHedefler.reduce((sum, h) => sum + (h.hedefTutar - h.biriken), 0); if (toplamKalanHedef > 0) { for (const hedef of aktifHedefler) { const hedefeKalan = hedef.hedefTutar - hedef.biriken; const oran = hedefeKalan / toplamKalanHedef; const odenecekTutar = Math.min(hedefeKalan, kalanDagitilacakFon * oran); if (odenecekTutar > 0) { hedef.onerilenBirikim += odenecekTutar; } } } return hedeflerData; }
+ayarlaOdeme = function(borcId, miktar) { const input = document.getElementById(`odeme-input-${borcId}`); let mevcut = parseFloat(input.value) || 0; let yeni = mevcut + miktar; if (yeni < 0) yeni = 0; input.value = yeni.toFixed(2); }
+ayarlaBirikim = function(hedefId, miktar) { const input = document.getElementById(`birikim-input-${hedefId}`); let mevcut = parseFloat(input.value) || 0; let yeni = mevcut + miktar; if (yeni < 0) yeni = 0; input.value = yeni.toFixed(2); }
+loadSettings = function() { const a = JSON.parse(localStorage.getItem('butceAyarlari')) || { birikim: 20, borc: 20 }; document.getElementById('birikimOrani').value = a.birikim; document.getElementById('borcOrani').value = a.borc; updateLabel('birikimOrani', 'birikimOraniLabel'); updateLabel('borcOrani', 'borcOraniLabel'); }
+updateLabel = function(id, label) { document.getElementById(label).textContent = document.getElementById(id).value; }
+ayarlariKaydet = function() { const ayarlar = { birikim: document.getElementById('birikimOrani').value, borc: document.getElementById('borcOrani').value }; localStorage.setItem('butceAyarlari', JSON.stringify(ayarlar)); alert("Ayarlar Kaydedildi!"); recalculateTotalsAndRender(); }
+loadKategoriler = function() { const datalist = document.getElementById('kategoriListesi'); datalist.innerHTML = ''; defaultKategoriler.forEach(k => { const option = document.createElement('option'); option.value = k; datalist.appendChild(option); }); }
